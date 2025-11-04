@@ -1,0 +1,14 @@
+@{
+    ViewData["Title"] = "Đăng ký";
+}
+<h2>Đăng ký</h2>
+@if (TempData["err"] != null) { <p style="color:red">@TempData["err"]</p> }
+@if (TempData["ok"]  != null) { <p style="color:green">@TempData["ok"]</p> }
+<form asp-action="Register" method="post">
+    @Html.AntiForgeryToken()
+    <div>Email: <input name="email" type="email" /></div>
+    <div>Họ tên: <input name="fullName" /></div>
+    <div>Mật khẩu: <input name="password" type="password" /></div>
+    <div>Nhập lại: <input name="confirmPassword" type="password" /></div>
+    <button type="submit">Tạo tài khoản</button>
+</form>

@@ -1,0 +1,15 @@
+@{
+    ViewData["Title"] = "Đăng nhập";
+    var returnUrl = ViewBag.ReturnUrl as string;
+}
+<h2>Đăng nhập</h2>
+@if (TempData["err"] != null) { <p style="color:red">@TempData["err"]</p> }
+<form asp-action="Login" method="post">
+    @Html.AntiForgeryToken()
+    <div>Email: <input name="email" type="email" /></div>
+    <div>Mật khẩu: <input name="password" type="password" /></div>
+    <div><label><input name="rememberMe" type="checkbox" /> Ghi nhớ</label></div>
+    <input type="hidden" name="returnUrl" value="@returnUrl" />
+    <button type="submit">Đăng nhập</button>
+</form>
+<div><a asp-action="Register">Đăng ký</a></div>
