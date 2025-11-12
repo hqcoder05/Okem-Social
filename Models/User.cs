@@ -12,8 +12,16 @@ public class User
     [Required, MaxLength(120)]
     public string FullName { get; set; } = "";
 
-    [Required]                       // lưu hash, KHÔNG lưu plain text
+    [Required]
     public string PasswordHash { get; set; } = "";
+
+    [MaxLength(40)]                  
+    public string? Nickname { get; set; }
+
+    [MaxLength(300)]
+    public string? Bio { get; set; }
+
+    public DateTime? AvatarUpdatedAt { get; set; }
 
     public Role Role { get; set; } = Role.User;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

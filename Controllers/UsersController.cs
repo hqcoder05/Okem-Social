@@ -8,7 +8,11 @@ namespace okem_social.Controllers;
 [Authorize]
 public class UsersController(IUserService userService) : Controller
 {
-    private int CurrentUserId => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    // Dùng ViewerId an toàn cho action AllowAnonymous
+    private int? ViewerId =>
+        User.Identity?.IsAuthenticated == true
+            ? int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!)
+            : (int?)null;
 
     [AllowAnonymous]
     [HttpGet]
@@ -17,19 +21,30 @@ public class UsersController(IUserService userService) : Controller
         var u = await userService.GetByIdAsync(id);
         if (u == null) return NotFound();
 
-        var isAuth = User.Identity?.IsAuthenticated == true;
-        ViewBag.IsMe = isAuth && id == CurrentUserId;
-        ViewBag.IsFollowing = isAuth && !ViewBag.IsMe
-            ? await userService.IsFollowingAsync(CurrentUserId, id)
+        // Thống kê
+        ViewBag.FollowersCount = await userService.CountFollowersAsync(id);
+        ViewBag.FollowingCount = await userService.CountFollowingAsync(id);
+        ViewBag.PostsCount = 0; // chưa làm Post
+
+        // Ngữ cảnh
+        ViewBag.IsOwner = ViewerId.HasValue && ViewerId.Value == id;
+        ViewBag.IsFollowing = (!ViewBag.IsOwner && ViewerId.HasValue)
+            ? await userService.IsFollowingAsync(ViewerId.Value, id)
             : false;
 
-        return View(u);
+        // UI helpers (không đổi DB)
+        ViewBag.Handle = "@" + (u.Email?.Split('@')[0].ToLower() ?? "user");
+        ViewBag.AvatarUrl = "/img/avatar-default.png";
+
+        return View(u); // Model là User
     }
 
     [HttpGet]
     public async Task<IActionResult> Search(string? keyword)
     {
-        var results = await userService.SearchAsync(keyword ?? "", CurrentUserId);
+        // Class có [Authorize] nên chắc chắn đã đăng nhập
+        var currentUserId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        var results = await userService.SearchAsync(keyword ?? "", currentUserId);
         ViewBag.Keyword = keyword ?? "";
         return View(results);
     }
@@ -42,7 +57,9 @@ public class UsersController(IUserService userService) : Controller
 
         ViewBag.Target = target;
         var followers = await userService.FollowersAsync(id);
-        return View(followers);
+
+        // Ép đường dẫn tuyệt đối để tránh lỗi View Not Found
+        return View("~/Views/Users/Followers.cshtml", followers);
     }
 
     [HttpGet]
@@ -53,14 +70,16 @@ public class UsersController(IUserService userService) : Controller
 
         ViewBag.Target = target;
         var following = await userService.FollowingAsync(id);
-        return View(following);
+
+        return View("~/Views/Users/Following.cshtml", following);
     }
 
     [HttpPost]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Follow(int id)
     {
-        await userService.FollowAsync(CurrentUserId, id);
+        var currentUserId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        await userService.FollowAsync(currentUserId, id);
         return RedirectToAction(nameof(Details), new { id });
     }
 
@@ -68,7 +87,8 @@ public class UsersController(IUserService userService) : Controller
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Unfollow(int id)
     {
-        await userService.UnfollowAsync(CurrentUserId, id);
+        var currentUserId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+        await userService.UnfollowAsync(currentUserId, id);
         return RedirectToAction(nameof(Details), new { id });
     }
 }
