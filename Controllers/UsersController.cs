@@ -1,94 +1,172 @@
-using System.Security.Claims;
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using okem_social.Services;
+using System.Security.Claims;
+using okem_social.Repositories;
+using okem_social.Models;
 
 namespace okem_social.Controllers;
 
 [Authorize]
-public class UsersController(IUserService userService) : Controller
+public class UsersController(IUserRepository userRepo) : Controller
 {
-    // Dùng ViewerId an toàn cho action AllowAnonymous
-    private int? ViewerId =>
-        User.Identity?.IsAuthenticated == true
-            ? int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!)
-            : (int?)null;
+    public IActionResult Index()
+    {
+        return View();
+    }
 
-    [AllowAnonymous]
-    [HttpGet]
     public async Task<IActionResult> Details(int id)
     {
-        var u = await userService.GetByIdAsync(id);
-        if (u == null) return NotFound();
+        var user = await userRepo.GetByIdAsync(id);
+        if (user == null)
+        {
+            return NotFound();
+        }
 
-        // Thống kê
-        ViewBag.FollowersCount = await userService.CountFollowersAsync(id);
-        ViewBag.FollowingCount = await userService.CountFollowingAsync(id);
-        ViewBag.PostsCount = 0; // chưa làm Post
+        var currentUserId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+        ViewBag.IsMe = currentUserId == user.Id;
 
-        // Ngữ cảnh
-        ViewBag.IsOwner = ViewerId.HasValue && ViewerId.Value == id;
-        ViewBag.IsFollowing = (!ViewBag.IsOwner && ViewerId.HasValue)
-            ? await userService.IsFollowingAsync(ViewerId.Value, id)
-            : false;
+        bool isFriend = false;
+        bool hasSentRequest = false;
+        bool hasIncomingRequest = false;
 
-        // UI helpers (không đổi DB)
-        ViewBag.Handle = "@" + (u.Email?.Split('@')[0].ToLower() ?? "user");
-        ViewBag.AvatarUrl = "/img/avatar-default.png";
+        if (currentUserId != 0 && currentUserId != user.Id)
+        {
+            isFriend = await userRepo.AreFriendsAsync(currentUserId, user.Id);
+            hasSentRequest = await userRepo.HasPendingRequestAsync(currentUserId, user.Id);
+            hasIncomingRequest = await userRepo.HasIncomingRequestAsync(currentUserId, user.Id);
+        }
 
-        return View(u); // Model là User
+        ViewBag.IsFriend = isFriend;
+        ViewBag.HasSentRequest = hasSentRequest;
+        ViewBag.HasIncomingRequest = hasIncomingRequest;
+
+        var friends = await userRepo.GetFriendsAsync(user.Id);
+        ViewBag.FriendsCount = friends.Count;
+
+        return View(user);
     }
 
-    [HttpGet]
-    public async Task<IActionResult> Search(string? keyword)
+    public async Task<IActionResult> Search(string keyword = "")
     {
-        // Class có [Authorize] nên chắc chắn đã đăng nhập
-        var currentUserId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        var results = await userService.SearchAsync(keyword ?? "", currentUserId);
-        ViewBag.Keyword = keyword ?? "";
-        return View(results);
+        var currentUserId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+
+        if (currentUserId == 0)
+        {
+            return Redirect("/Account/Login?returnUrl=/Users/Search");
+        }
+
+        try
+        {
+            var users = await userRepo.SearchAsync(keyword, currentUserId) ?? new List<User>();
+            var userViewModels = new List<UserSearchViewModel>();
+
+            foreach (var user in users)
+            {
+                var isFriend = await userRepo.AreFriendsAsync(currentUserId, user.Id);
+                var hasSentRequest = await userRepo.HasPendingRequestAsync(currentUserId, user.Id);
+                var hasIncomingRequest = await userRepo.HasIncomingRequestAsync(currentUserId, user.Id);
+
+                userViewModels.Add(new UserSearchViewModel
+                {
+                    User = user,
+                    IsFriend = isFriend,
+                    HasSentRequest = hasSentRequest,
+                    HasIncomingRequest = hasIncomingRequest,
+                    IsCurrentUser = user.Id == currentUserId
+                });
+            }
+
+            ViewBag.Keyword = keyword;
+            ViewBag.CurrentUserId = currentUserId; // ✅ để view Search dùng tạo link xem lời mời
+
+            return View(userViewModels);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Search error: {ex.Message}");
+            ViewBag.Keyword = keyword;
+            ViewBag.CurrentUserId = currentUserId;
+            return View(new List<UserSearchViewModel>());
+        }
     }
 
-    [HttpGet]
-    public async Task<IActionResult> Followers(int id)
+    // Danh sách lời mời kết bạn ĐẾN (incoming)
+    public async Task<IActionResult> IncomingRequests(int id)
     {
-        var target = await userService.GetByIdAsync(id);
+        var currentUserId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+        if (currentUserId == 0) return Unauthorized();
+        if (currentUserId != id) return Forbid();
+
+        var target = await userRepo.GetByIdAsync(id);
         if (target == null) return NotFound();
 
+        var users = await userRepo.GetIncomingRequestsAsync(id);
         ViewBag.Target = target;
-        var followers = await userService.FollowersAsync(id);
-
-        // Ép đường dẫn tuyệt đối để tránh lỗi View Not Found
-        return View("~/Views/Users/Followers.cshtml", followers);
+        return View("IncomingRequests", users);
     }
 
-    [HttpGet]
-    public async Task<IActionResult> Following(int id)
+    // Danh sách lời mời kết bạn ĐÃ GỬI (outgoing)
+    public async Task<IActionResult> OutgoingRequests(int id)
     {
-        var target = await userService.GetByIdAsync(id);
+        var currentUserId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+        if (currentUserId == 0) return Unauthorized();
+        if (currentUserId != id) return Forbid();
+
+        var target = await userRepo.GetByIdAsync(id);
         if (target == null) return NotFound();
 
+        var users = await userRepo.GetOutgoingRequestsAsync(id);
         ViewBag.Target = target;
-        var following = await userService.FollowingAsync(id);
-
-        return View("~/Views/Users/Following.cshtml", following);
+        return View("OutgoingRequests", users);
     }
 
+    // Gửi lời mời kết bạn
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Follow(int id)
+    public async Task<IActionResult> SendRequest(int id)
     {
-        var currentUserId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        await userService.FollowAsync(currentUserId, id);
-        return RedirectToAction(nameof(Details), new { id });
+        var currentUserId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+        if (currentUserId == 0) return Unauthorized();
+        if (currentUserId == id) return BadRequest();
+
+        await userRepo.SendFriendRequestAsync(currentUserId, id);
+        return RedirectToAction("Details", new { id });
     }
 
+    // Chấp nhận lời mời (id = người đã gửi lời mời)
     [HttpPost]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> Unfollow(int id)
+    public async Task<IActionResult> Accept(int id)
     {
-        var currentUserId = int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-        await userService.UnfollowAsync(currentUserId, id);
-        return RedirectToAction(nameof(Details), new { id });
+        var currentUserId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+        if (currentUserId == 0) return Unauthorized();
+        if (currentUserId == id) return BadRequest();
+
+        await userRepo.AcceptFriendRequestAsync(id, currentUserId);
+        return RedirectToAction("Details", new { id });
+    }
+
+    // Hủy lời mời mình đã gửi
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Cancel(int id)
+    {
+        var currentUserId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+        if (currentUserId == 0) return Unauthorized();
+
+        await userRepo.CancelFriendRequestAsync(currentUserId, id);
+        return RedirectToAction("Details", new { id });
+    }
+
+    // Hủy kết bạn
+    [HttpPost]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> Unfriend(int id)
+    {
+        var currentUserId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+        if (currentUserId == 0) return Unauthorized();
+
+        await userRepo.RemoveFriendAsync(currentUserId, id);
+        return RedirectToAction("Details", new { id });
     }
 }
