@@ -16,6 +16,12 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .HasIndex(u => u.Email)
             .IsUnique();
 
+        // Unique Nickname nếu không null
+        b.Entity<User>()
+            .HasIndex(u => u.Nickname)
+            .IsUnique()
+            .HasFilter("[Nickname] IS NOT NULL"); // SQL Server; nếu Postgres: HasFilter("\"Nickname\" IS NOT NULL")
+
         b.Entity<User>()
             .Property(u => u.Role)
             .HasConversion<int>();
@@ -36,7 +42,6 @@ public class ApplicationDbContext(DbContextOptions<ApplicationDbContext> options
             .HasForeignKey(f => f.FolloweeId)
             .OnDelete(DeleteBehavior.NoAction);
 
-        // Không tự theo dõi chính mình
         b.Entity<Follow>()
             .HasCheckConstraint("CK_Follow_NoSelf", "FollowerId <> FolloweeId");
     }
