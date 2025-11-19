@@ -1,61 +1,117 @@
 @model okem_social.Models.User
 
 @{
-    ViewData["Title"] = "Hồ sơ";
-    var userId = Model.Id;
+    ViewData["Title"] = "Hồ sơ người dùng";
+
+    bool isMe = ViewBag.IsMe ?? false;
+    bool isFriend = ViewBag.IsFriend ?? false;
+    bool hasSentRequest = ViewBag.HasSentRequest ?? false;
+    bool hasIncomingRequest = ViewBag.HasIncomingRequest ?? false;
+
+    var displayName = string.IsNullOrWhiteSpace(Model.FullName)
+        ? Model.Email
+        : Model.FullName;
+    var avatarText = !string.IsNullOrWhiteSpace(displayName)
+        ? displayName.Trim()[0].ToString().ToUpper()
+        : "U";
 }
 
 <div class="page-transition">
     <div class="row">
         <div class="col-lg-8 mx-auto">
 
-            <!-- PROFILE HEADER -->
+            <!-- HEADER kiểu Instagram -->
             <div class="modern-card mb-4">
-                <div class="d-flex align-items-center flex-wrap gap-4">
+                <div class="row align-items-center g-4">
                     <!-- Avatar -->
-                    <div class="profile-avatar-wrapper">
-                        <div class="profile-avatar-circle">
-                            @{
-                                var displayName = string.IsNullOrWhiteSpace(Model.FullName)
-                                ? Model.Email
-                                : Model.FullName;
-                                var avatarText = !string.IsNullOrWhiteSpace(displayName)
-                                ? displayName.Trim()[0].ToString().ToUpper()
-                                : "U";
-                            }
+                    <div class="col-auto d-flex justify-content-center">
+                        <div class="profile-avatar-circle-lg">
                             @avatarText
                         </div>
                     </div>
 
                     <!-- Info + actions -->
-                    <div class="flex-grow-1">
-                        <div class="d-flex align-items-center flex-wrap gap-3 mb-2">
-                            <h2 class="mb-0 h4">@Model.FullName</h2>
-                            <span class="badge bg-light text-muted">@Model.Email</span>
+                    <div class="col">
+                        <!-- Tên + nút hành động -->
+                        <div class="d-flex flex-wrap align-items-center gap-3 mb-2">
+                            <h2 class="h4 mb-0">@displayName</h2>
 
-                            <button class="btn btn-outline-secondary btn-sm"
-                                    data-bs-toggle="modal"
-                                    data-bs-target="#editProfileModal">
-                                <i class="fa-regular fa-pen-to-square me-1"></i>Chỉnh sửa hồ sơ
-                            </button>
+                            @if (isMe)
+                            {
+                                <a asp-controller="Profile"
+                                   asp-action="Me"
+                                   class="btn btn-outline-secondary btn-sm">
+                                    <i class="fa-regular fa-pen-to-square me-1"></i> Chỉnh sửa hồ sơ
+                                </a>
+                            }
+                            else
+                            {
+                                <!-- Khu vực nút kết bạn như Instagram có nút Follow -->
+                                <div class="d-flex flex-wrap gap-2">
+
+                                    @* Đã là bạn bè *@
+                                    @if (isFriend)
+                                    {
+                                        <form asp-action="Unfriend" asp-controller="Users" asp-route-id="@Model.Id" method="post" class="d-inline">
+                                            @Html.AntiForgeryToken()
+                                            <button type="submit" class="btn btn-outline-secondary btn-sm">
+                                                <i class="fa-solid fa-user-check me-1"></i> Bạn bè
+                                            </button>
+                                        </form>
+                                    }
+                                    else if (hasIncomingRequest)
+                                    {
+                                        @* Người ta đã gửi lời mời cho mình *@
+                                        <form asp-action="Accept" asp-controller="Users" asp-route-id="@Model.Id" method="post" class="d-inline">
+                                            @Html.AntiForgeryToken()
+                                            <button type="submit" class="btn btn-primary btn-sm">
+                                                <i class="fa-solid fa-user-plus me-1"></i> Chấp nhận
+                                            </button>
+                                        </form>
+                                    }
+                                    else if (hasSentRequest)
+                                    {
+                                        @* Mình đã gửi lời mời *@
+                                        <form asp-action="Cancel" asp-controller="Users" asp-route-id="@Model.Id" method="post" class="d-inline">
+                                            @Html.AntiForgeryToken()
+                                            <button type="submit" class="btn btn-outline-secondary btn-sm">
+                                                <i class="fa-solid fa-clock me-1"></i> Đã gửi lời mời
+                                            </button>
+                                        </form>
+                                    }
+                                    else
+                                    {
+                                        @* Chưa là bạn *@
+                                        <form asp-action="SendRequest" asp-controller="Users" asp-route-id="@Model.Id" method="post" class="d-inline">
+                                            @Html.AntiForgeryToken()
+                                            <button type="submit" class="btn btn-primary btn-sm">
+                                                <i class="fa-solid fa-user-plus me-1"></i> Kết bạn
+                                            </button>
+                                        </form>
+                                    }
+
+                                    @* Có thể sau này thêm nút Nhắn tin *@
+                                    @* <a href="/Conversations/With/@Model.Id" class="btn btn-light btn-sm">Nhắn tin</a> *@
+                                </div>
+                            }
                         </div>
 
-                        <!-- Stats -->
-                        <div class="d-flex flex-wrap gap-4 mb-2">
+                        <!-- Stats giống Instagram: bài viết, bạn bè -->
+                        <div class="d-flex flex-wrap gap-4 mb-2 profile-stats-row">
                             <div>
                                 <span class="fw-semibold" id="stat-posts">0</span>
                                 <span class="text-muted">bài viết</span>
                             </div>
                             <div>
-                                <span class="fw-semibold" id="stat-friends">0</span>
+                                <span class="fw-semibold" id="stat-friends">@(ViewBag.FriendsCount ?? 0)</span>
                                 <span class="text-muted">bạn bè</span>
-                            </div>
-                            <div>
-                                <span class="fw-semibold" id="stat-requests">0</span>
-                                <span class="text-muted">lời mời</span>
                             </div>
                         </div>
 
+                        <!-- Bio nhỏ -->
+                        <div class="text-muted small mb-1">
+                            <i class="fa-regular fa-envelope me-1"></i>@Model.Email
+                        </div>
                         <div class="text-muted small">
                             Tham gia ngày @Model.CreatedAt.ToLocalTime().ToString("dd/MM/yyyy")
                         </div>
@@ -63,99 +119,36 @@
                 </div>
             </div>
 
-            <!-- TABS -->
+            <!-- GRID POSTS kiểu Instagram -->
             <div class="modern-card mb-3">
-                <ul class="nav nav-pills profile-tabs" role="tablist">
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link active" id="tab-posts" data-bs-toggle="pill" data-bs-target="#pane-posts" type="button">
-                            <i class="fa-solid fa-border-all me-1"></i>Bài viết
-                        </button>
-                    </li>
-                    <li class="nav-item" role="presentation">
-                        <button class="nav-link" id="tab-friends" data-bs-toggle="pill" data-bs-target="#pane-friends" type="button">
-                            <i class="fa-solid fa-user-group me-1"></i>Bạn bè
-                        </button>
-                    </li>
-                </ul>
-            </div>
+                <div class="px-3 pt-3 pb-2 border-bottom">
+                    <strong>Bài viết</strong>
+                </div>
 
-            <!-- TAB CONTENT -->
-            <div class="tab-content">
-
-                <!-- POSTS GRID -->
-                <div class="tab-pane fade show active" id="pane-posts">
+                <div class="p-2">
                     <div id="profile-posts-grid" class="row g-1">
-                        <!-- Grid items load bằng JS -->
+                        <!-- item sẽ load bằng JS -->
                     </div>
 
-                    <div id="profile-posts-empty" class="modern-card text-center py-5 d-none">
+                    <div id="profile-posts-empty" class="text-center py-5 d-none">
                         <div class="empty-state">
-                            <div class="empty-icon">
-                                <i class="fa-regular fa-image"></i>
+                            <div class="empty-icon mb-2">
+                                <i class="fa-regular fa-image fa-2x text-muted"></i>
                             </div>
-                            <h5>Chưa có bài viết nào</h5>
-                            <p>Bắt đầu chia sẻ khoảnh khắc đầu tiên của bạn.</p>
-                            <a asp-controller="Posts" asp-action="Create" class="btn btn-primary mt-2">
-                                <i class="fa-solid fa-pen-to-square me-2"></i>Tạo bài viết
-                            </a>
+                            <h6 class="text-muted fw-semibold mb-1">Chưa có bài viết nào</h6>
+                            <p class="text-muted small mb-0">
+                                Các bài viết của @displayName sẽ hiển thị tại đây.
+                            </p>
                         </div>
                     </div>
                 </div>
-
-                <!-- FRIENDS LIST -->
-                <div class="tab-pane fade" id="pane-friends">
-                    <div id="profile-friends-list" class="modern-card">
-                        <div class="text-muted small">Đang tải danh sách bạn bè...</div>
-                    </div>
-                </div>
-
             </div>
 
         </div>
     </div>
 </div>
 
-<!-- EDIT PROFILE MODAL -->
-<div class="modal fade" id="editProfileModal" tabindex="-1" aria-labelledby="editProfileModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <form asp-action="Me" asp-controller="Profile" method="post">
-                @Html.AntiForgeryToken()
-                <div class="modal-header">
-                    <h5 class="modal-title" id="editProfileModalLabel">Chỉnh sửa hồ sơ</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Đóng"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="mb-3">
-                        <label class="form-label">Họ và tên</label>
-                        <input type="text"
-                               class="form-control"
-                               name="fullName"
-                               value="@Model.FullName"
-                               required />
-                    </div>
-                    <div class="mb-2 text-muted small">
-                        Email đăng nhập: <strong>@Model.Email</strong> (không thể đổi)
-                    </div>
-                    @if (TempData["err"] != null)
-                    {
-                        <div class="alert alert-danger py-1 mt-2 mb-0">@TempData["err"]</div>
-                    }
-                    @if (TempData["ok"] != null)
-                    {
-                        <div class="alert alert-success py-1 mt-2 mb-0">@TempData["ok"]</div>
-                    }
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Hủy</button>
-                    <button type="submit" class="btn btn-primary">Lưu thay đổi</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- POST MODAL -->
+<!-- MODAL XEM POST (giống khi bấm thông báo / trang Me) -->
 <div class="modal fade" id="postModal" tabindex="-1" aria-labelledby="postModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content">
@@ -187,7 +180,7 @@
 
                 <div id="postModalComments">
                     <div class="comments-list small" id="postModalCommentsList">
-                        <!-- comment sẽ load bằng JS -->
+                        <!-- comment load bằng JS -->
                     </div>
                 </div>
             </div>
@@ -196,13 +189,9 @@
 </div>
 
 <style>
-    .profile-avatar-wrapper {
-        flex: 0 0 auto;
-    }
-
-    .profile-avatar-circle {
-        width: 96px;
-        height: 96px;
+    .profile-avatar-circle-lg {
+        width: 120px;
+        height: 120px;
         border-radius: 999px;
         display: flex;
         align-items: center;
@@ -210,27 +199,19 @@
         background: linear-gradient(135deg, #3B82F6, #6366F1);
         color: #fff;
         font-weight: 700;
-        font-size: 2rem;
+        font-size: 3rem;
         text-transform: uppercase;
     }
 
-    .profile-tabs .nav-link {
-        padding: 0.5rem 1.25rem;
-        border-radius: 999px;
-        font-weight: 600;
-        color: #6B7280;
+    .profile-stats-row > div {
+        min-width: 80px;
     }
 
-        .profile-tabs .nav-link.active {
-            background: linear-gradient(135deg, #4F46E5, #6366F1);
-            color: #fff;
-        }
-
-    /* GRID 3 cột, tile vuông như Instagram */
+    /* GRID 3 cột kiểu Instagram */
     #profile-posts-grid .profile-post-tile {
         position: relative;
         width: 100%;
-        padding-top: 100%;
+        padding-top: 100%; /* vuông */
         overflow: hidden;
         background: #111;
         cursor: pointer;
@@ -331,49 +312,36 @@
         font-size: 0.75rem;
         color: #9ca3af;
     }
-
-    .friend-item {
-        cursor: pointer;
-        transition: background-color 0.15s ease;
-    }
-
-        .friend-item:hover {
-            background-color: #f3f4f6;
-        }
 </style>
 
 @section Scripts {
     <script>
         document.addEventListener("DOMContentLoaded", function () {
-            const userId = @userId;
+            const userId = @Model.Id;
 
             loadProfileStats(userId);
             loadProfilePosts(userId);
-            loadFriends(userId);
         });
+
+        // Lưu posts để modal dùng lại
+        window.profileUserPosts = [];
 
         async function loadProfileStats(userId) {
             try {
-                const [postsRes, friendsRes, incomingRes] = await Promise.all([
+                const [postsRes, friendsRes] = await Promise.all([
                     fetch(`/api/posts/user/${userId}?skip=0&take=100`, { headers: { "X-Requested-With": "XMLHttpRequest" } }),
-                    fetch(`/api/users/${userId}/friends`, { headers: { "X-Requested-With": "XMLHttpRequest" } }),
-                    fetch(`/api/users/me/friend-requests/incoming`, { headers: { "X-Requested-With": "XMLHttpRequest" } })
+                    fetch(`/api/users/${userId}/friends`, { headers: { "X-Requested-With": "XMLHttpRequest" } })
                 ]);
 
                 const posts = postsRes.ok ? await postsRes.json() : [];
                 const friends = friendsRes.ok ? await friendsRes.json() : [];
-                const incoming = incomingRes.ok ? await incomingRes.json() : [];
 
                 document.getElementById("stat-posts").textContent = posts.length;
                 document.getElementById("stat-friends").textContent = friends.length;
-                document.getElementById("stat-requests").textContent = incoming.length;
             } catch (e) {
                 console.error("loadProfileStats error", e);
             }
         }
-
-        // GLOBAL để modal dùng lại dữ liệu post
-        window.profilePosts = [];
 
         async function loadProfilePosts(userId) {
             const grid = document.getElementById("profile-posts-grid");
@@ -392,7 +360,7 @@
                 }
 
                 const posts = await res.json();
-                window.profilePosts = posts;
+                window.profileUserPosts = posts;
 
                 if (!posts || posts.length === 0) {
                     empty.classList.remove("d-none");
@@ -456,67 +424,8 @@
             }
         }
 
-        async function loadFriends(userId) {
-            const container = document.getElementById("profile-friends-list");
-            if (!container) return;
-
-            try {
-                const res = await fetch(`/api/users/${userId}/friends`, {
-                    headers: { "X-Requested-With": "XMLHttpRequest" }
-                });
-
-                if (!res.ok) {
-                    throw new Error();
-                }
-
-                const friends = await res.json();
-                if (!friends || friends.length === 0) {
-                    container.innerHTML = '<div class="text-muted small px-3 py-3">Bạn chưa có người bạn nào. Hãy gửi lời mời kết bạn để bắt đầu kết nối.</div>';
-                    return;
-                }
-
-                const list = document.createElement("div");
-                list.className = "list-group list-group-flush";
-
-                friends.forEach(f => {
-                    // mỗi item là <a> để click sang trang profile bạn bè
-                    const item = document.createElement("a");
-                    item.href = `/Users/Details/${f.id}`;
-                    item.className = "list-group-item d-flex align-items-center gap-3 text-decoration-none text-reset friend-item";
-
-                    const avatar = document.createElement("div");
-                    avatar.className = "avatar-circle";
-                    const name = (f.fullName || f.email || "U").trim();
-                    avatar.textContent = name[0].toUpperCase();
-
-                    const body = document.createElement("div");
-                    const title = document.createElement("div");
-                    title.className = "fw-semibold";
-                    title.textContent = f.fullName || f.email || "Người dùng";
-
-                    const meta = document.createElement("div");
-                    meta.className = "text-muted small";
-                    meta.textContent = f.email || "";
-
-                    body.appendChild(title);
-                    body.appendChild(meta);
-
-                    item.appendChild(avatar);
-                    item.appendChild(body);
-
-                    list.appendChild(item);
-                });
-
-                container.innerHTML = "";
-                container.appendChild(list);
-            } catch (e) {
-                console.error("loadFriends error", e);
-                container.innerHTML = '<div class="text-danger small px-3 py-3">Lỗi khi tải danh sách bạn bè.</div>';
-            }
-        }
-
         async function openPostModal(postId) {
-            const post = (window.profilePosts || []).find(p => p.id === postId);
+            const post = (window.profileUserPosts || []).find(p => p.id === postId);
             if (!post) {
                 console.warn("Không tìm thấy post", postId);
                 return;
