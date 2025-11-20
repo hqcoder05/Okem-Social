@@ -12,6 +12,12 @@ public class User
     [Required, MaxLength(120)]
     public string FullName { get; set; } = "";
 
+    [MaxLength(40)]
+    public string? Nickname { get; set; }
+
+    [MaxLength(300)]
+    public string? Bio { get; set; }
+
     // Ảnh đại diện (có thể null)
     [MaxLength(500)]
     public string? AvatarUrl { get; set; }
